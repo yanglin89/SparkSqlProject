@@ -36,7 +36,7 @@ object AccessConvertUtil {
     if(StringUtils.isNotBlank(splits(1)))
       url = splits(1)
     var traffic = 0L
-    if(StringUtils.isNotBlank(splits(2)))
+    if(StringUtils.isNotBlank(splits(2)) && splits(2).indexOf("\\") < 0)
       traffic = splits(2).toLong
     var ip = ""
     var city = ""
@@ -73,14 +73,18 @@ object AccessConvertUtil {
     var hour = ""
     if(StringUtils.isNotBlank(splits(0))){
       time = splits(0)
-      hour = time.substring(0, 13).replaceAll("-", "")
+      hour = time.substring(0, 13).replaceAll("-", "").replaceAll(" ","-")
     }
+
 
     // 得到 Row  row中的字段要和结构体中的字段对应上
     Row(url, cmsType, cmsId.toLong, traffic.toLong, ip, city, time, hour)
   } catch {
     // 异常处理为当出现异常时，不过处理，返回Row(0)
-    case e : Exception => Row(0)
+    case e : Exception => {
+      println(log)
+      println(log.split("\t")(2))
+      Row(0)}
   }
 
   }

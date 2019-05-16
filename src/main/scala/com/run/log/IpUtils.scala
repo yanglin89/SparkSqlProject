@@ -14,6 +14,9 @@ object IpUtils {
   def main(args: Array[String]): Unit = {
     val ip = "15.118.4.192"
     println(getCity(ip))
+
+    val a = "a\\N";
+    println(a.indexOf("\\"))
   }
 
 }

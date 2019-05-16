@@ -1,6 +1,6 @@
 package com.run.log
 
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{SaveMode, SparkSession}
 
 /**
   * 使用 spark 完成数据清洗操作
@@ -21,6 +21,10 @@ object SparkStatCleanJob {
 
     accessDF.printSchema()
     accessDF.show(30,true)
+
+    // 将结果集按照 hour 分区 ，并且每个分区设定一个输出文件，已覆盖的方式生成 parquet 文件
+    accessDF.coalesce(1).write.format("parquet")
+      .mode(SaveMode.Overwrite).partitionBy("hour").save("E:/study_data/clean/")
 
     spark.stop()
 
