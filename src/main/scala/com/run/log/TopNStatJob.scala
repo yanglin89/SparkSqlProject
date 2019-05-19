@@ -1,13 +1,15 @@
 package com.run.log
 
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
+
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 /**
   * topn 统计 作业
   * */
 object TopNStatJob {
-
 
   def main(args: Array[String]): Unit = {
 
@@ -20,25 +22,170 @@ object TopNStatJob {
 //    accessDF.printSchema()
 //    accessDF.show(50,false)
 
-    topNStatCountByDF(spark,accessDF)
+    // 首先删除数据库已有数据 , 按照分区
+    val partitions = ArrayBuffer[String]()
+    val day = "20130721-"
+    for(i <- 0 to 23){
+      var complete = ""
+      if (i < 10){
+        complete = day + "0" + i
+      }else{
+        complete = day + i
+      }
+
+      partitions.append(complete)
+    }
+
+    for (partiton <- partitions){
+      StatDao.deletePartition(partiton)
+    }
+
+
+    // 按照 topicId 统计 topn
+    topNStatCountByDF(spark,accessDF,day)
 //    topNStatCountBySql(spark,accessDF)
+
+    // 按照地市信息统计 topn
+    cityTopnStat(spark,accessDF,day)
+
+    // 按照流量进行统计 topn
+    trafficTopnStat(spark,accessDF,day)
+
 
     spark.stop()
   }
+
+
+  /**
+    * topn 的 流量 traffic 统计，并 过滤掉 流量为 0 的
+    * 通过 dataframe 的方式
+    * */
+  def trafficTopnStat(spark: SparkSession, accessDF: DataFrame,day:String) = {
+    import spark.implicits._
+
+    val trafficTopn = accessDF.filter($"hour".startsWith(day) && $"cmsType" === "topicId")
+      .groupBy("hour","cmsId")
+      .agg(sum("traffic").as("traffics"))
+      .orderBy($"traffics".desc)
+      .filter("traffics > 0")
+//      .show()
+
+
+    // 窗口 Windows 函数在 sparksql 中的使用
+    // 将统计结果写入到 mysql数据库
+    try{
+      // 循环所有的分区
+      trafficTopn.foreachPartition(partitonOfAccess => {
+        val list = new ListBuffer[TrafficAccessTopnStat]
+
+        // 循环每一个分区的数据
+        partitonOfAccess.foreach(info => {
+          val hour = info.getAs[String]("hour")
+          val cmsId = info.getAs[Long]("cmsId")
+          val traffics = info.getAs[Long]("traffics")
+
+          list.append(TrafficAccessTopnStat(hour,cmsId,traffics))
+        })
+
+        StatDao.insertTrafficAccessStatTopn(list)
+
+      })
+    }catch {
+      case e:Exception => e.printStackTrace()
+    }
+
+
+  }
+
+
+  /**
+    * topn 的 city 统计
+    * 通过 dataframe 的方式
+    * */
+  def cityTopnStat(spark: SparkSession, accessDF: DataFrame,day:String) = {
+    import spark.implicits._
+
+    val cityTopn = accessDF.filter($"hour".startsWith(day) && $"cmsType" === "topicId")
+      .groupBy("hour","cmsId","city")
+      .agg(count("cmsId").as("times"))
+      .orderBy($"times".desc)
+
+//    println(cityTopn.count())
+
+    // 窗口 Windows 函数在 sparksql 中的使用
+    // 每个地市做一次 window 函数，按照 times 降序 即为： 分别统计每一个地市的topicId 的top3
+    val topnDF = cityTopn.select(cityTopn.col("hour"),cityTopn.col("cmsId"),
+      cityTopn.col("city"),cityTopn.col("times"),
+      row_number().over(
+        Window.partitionBy(cityTopn.col("city"))
+        .orderBy(cityTopn.col("times").desc))
+        .as("times_rank"))
+      .filter("times_rank <= 3")
+//      .show()
+
+    // 将统计结果写入到 mysql数据库
+    try{
+      // 循环所有的分区
+      topnDF.foreachPartition(partitonOfAccess => {
+        val list = new ListBuffer[CityAccessTopnStat]
+
+        // 循环每一个分区的数据
+        partitonOfAccess.foreach(info => {
+          val hour = info.getAs[String]("hour")
+          val cmsId = info.getAs[Long]("cmsId")
+          val city = info.getAs[String]("city")
+          val times = info.getAs[Long]("times")
+          val rank = info.getAs[Int]("times_rank")
+
+          list.append(CityAccessTopnStat(hour,cmsId,city,times,rank))
+        })
+
+        StatDao.insertCityAccessStatTopn(list)
+
+      })
+    }catch {
+      case e:Exception => e.printStackTrace()
+    }
+
+
+  }
+
 
   /**
     * topn 的topicid 统计
     * 通过 dataframe 的方式
     * */
-  def topNStatCountByDF(spark: SparkSession, accessDF: DataFrame) = {
+  def topNStatCountByDF(spark: SparkSession, accessDF: DataFrame ,day:String) = {
 
     import spark.implicits._
 
 
-    val topnDF = accessDF.filter($"hour".startsWith("20130721-")  && $"cmsType" === "topicId")
+    val topnDF = accessDF.filter($"hour".startsWith(day)  && $"cmsType" === "topicId")
       .groupBy("hour","cmsId").agg(count("cmsId").as("times")).orderBy($"times".desc)
 
     topnDF.show(false)
+
+    // 将统计结果写入到 mysql数据库
+    try{
+      // 循环所有的分区
+        topnDF.foreachPartition(partitonOfAccess => {
+          val list = new ListBuffer[HourAccessTopnStat]
+
+          // 循环每一个分区的数据
+          partitonOfAccess.foreach(info => {
+            val hour = info.getAs[String]("hour")
+            val cmsId = info.getAs[Long]("cmsId")
+            val times = info.getAs[Long]("times")
+
+            list.append(HourAccessTopnStat(hour,cmsId,times))
+          })
+
+          StatDao.insertAccessStatTopn(list)
+
+        })
+    }catch {
+      case e:Exception => e.printStackTrace()
+    }
 
   }
 
@@ -54,6 +201,29 @@ object TopNStatJob {
           "group by hour,cmsId order by times desc")
 
     topnDF.show(false)
+
+    // 将结果添加到mysql 数据库
+    try{
+
+      topnDF.foreachPartition(partitions =>{
+        val list = new ListBuffer[HourAccessTopnStat]
+
+        partitions.foreach(info => {
+          val hour = info.getAs[String]("hour")
+          val cmsId = info.getAs[Long]("cmsId")
+          val times = info.getAs[Long]("times")
+
+          list.append(HourAccessTopnStat(hour,cmsId,times))
+        })
+
+        StatDao.insertAccessStatTopn(list)
+
+      })
+
+    }catch {
+      case e: Exception => e.printStackTrace()
+    }
+
 
   }
 
