@@ -1,30 +1,35 @@
 package com.run.log
 
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 /**
   * topn 统计 作业
   * */
-object TopNStatJob {
+object TopNStatJobYarn {
 
   def main(args: Array[String]): Unit = {
 
-    val spark = SparkSession.builder().appName("TopNStatJob").master("local[2]")
+    if(args.length < 2){
+      println("Usage : SparkStatCleanJob <InputPath> <day>")
+      System.exit(1)
+    }
+
+    val Array(inputPath,day) = args
+
+    val spark = SparkSession.builder()
       .config("spark.sql.sources.partitionColumnTypeInference.enable","false").getOrCreate()
 
     // 注意 load 的path 中，要是最后的路径后面加 * 如 XXX/clean/*，则加载到的数据没有分区信息，我们把* 去掉，则打印schema 存在分区信息
-    val accessDF = spark.read.format("parquet").load("E:/study_data/clean/")
-
-    accessDF.printSchema()
-    accessDF.show(50,false)
+    val accessDF = spark.read.format("parquet").load(inputPath)
+//    accessDF.show(50,false)
 
     // 首先删除数据库已有数据 , 按照分区
     val partitions = ArrayBuffer[String]()
-    val day = "20130721-"
+    //val day = "20130721-"
     for(i <- 0 to 23){
       var complete = ""
       if (i < 10){

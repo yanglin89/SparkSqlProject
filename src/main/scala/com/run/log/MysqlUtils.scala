@@ -12,7 +12,8 @@ object MysqlUtils {
     * 获取 mysql 数据库连接
     * */
   def getConnection(): Connection ={
-    DriverManager.getConnection("jdbc:mysql://master:3306/sparksql_project?user=hadoop&password=mdhc5891")
+    DriverManager.getConnection("jdbc:mysql://master:3306/sparksql_project?useSSL=false","hadoop","mdhc5891")
+//    DriverManager.getConnection("jdbc:mysql://master:3306/sparksql_project?user=hadoop&password=mdhc5891")
   }
 
   /**

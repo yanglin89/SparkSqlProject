@@ -9,7 +9,9 @@ object SparkStatCleanJob {
 
   def main(args: Array[String]): Unit = {
 
-    val spark = SparkSession.builder().appName("SparkStatCleanJob").master("local[2]").getOrCreate()
+    val spark = SparkSession.builder().appName("SparkStatCleanJob").master("local[2]")
+      //.config("spark.sql.parquet.compression.codec","gzip")
+      .getOrCreate()
 
     val accessRDD = spark.sparkContext.textFile("file:///E:/study_data/output/*")
 

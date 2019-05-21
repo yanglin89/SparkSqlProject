@@ -1,26 +1,27 @@
 package com.run.log
 
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 /**
   * topn 统计 作业
   * */
-object TopNStatJob {
+object TopNStatJobReusable {
 
   def main(args: Array[String]): Unit = {
 
+    // spark.sql.sources.partitionColumnTypeInference.enable 分区字段类型的智能识别是否开区，默认开启 true
     val spark = SparkSession.builder().appName("TopNStatJob").master("local[2]")
       .config("spark.sql.sources.partitionColumnTypeInference.enable","false").getOrCreate()
 
     // 注意 load 的path 中，要是最后的路径后面加 * 如 XXX/clean/*，则加载到的数据没有分区信息，我们把* 去掉，则打印schema 存在分区信息
     val accessDF = spark.read.format("parquet").load("E:/study_data/clean/")
 
-    accessDF.printSchema()
-    accessDF.show(50,false)
+//    accessDF.printSchema()
+//    accessDF.show(50,false)
 
     // 首先删除数据库已有数据 , 按照分区
     val partitions = ArrayBuffer[String]()
@@ -40,18 +41,23 @@ object TopNStatJob {
       StatDao.deletePartition(partiton)
     }
 
+  // 复用 commonDF ，将 commonDF 放置在 缓存 cache 中
+    import spark.implicits._
+    val commonDF = accessDF.filter($"hour".startsWith(day)  && $"cmsType" === "topicId")
+    commonDF.cache()
 
     // 按照 topicId 统计 topn
-    topNStatCountByDF(spark,accessDF,day)
+    topNStatCountByDF(spark,commonDF)
 //    topNStatCountBySql(spark,accessDF)
 
     // 按照地市信息统计 topn
-    cityTopnStat(spark,accessDF,day)
+    cityTopnStat(spark,commonDF)
 
     // 按照流量进行统计 topn
-    trafficTopnStat(spark,accessDF,day)
+    trafficTopnStat(spark,commonDF)
 
-
+    // 将缓存中的 commonDF 释放
+    commonDF.unpersist(true)
     spark.stop()
   }
 
@@ -60,10 +66,10 @@ object TopNStatJob {
     * topn 的 流量 traffic 统计，并 过滤掉 流量为 0 的
     * 通过 dataframe 的方式
     * */
-  def trafficTopnStat(spark: SparkSession, accessDF: DataFrame,day:String) = {
+  def trafficTopnStat(spark: SparkSession, commonDF: DataFrame) = {
     import spark.implicits._
 
-    val trafficTopn = accessDF.filter($"hour".startsWith(day) && $"cmsType" === "topicId")
+    val trafficTopn = commonDF
       .groupBy("hour","cmsId")
       .agg(sum("traffic").as("traffics"))
       .orderBy($"traffics".desc)
@@ -102,10 +108,10 @@ object TopNStatJob {
     * topn 的 city 统计
     * 通过 dataframe 的方式
     * */
-  def cityTopnStat(spark: SparkSession, accessDF: DataFrame,day:String) = {
+  def cityTopnStat(spark: SparkSession, commonDF: DataFrame) = {
     import spark.implicits._
 
-    val cityTopn = accessDF.filter($"hour".startsWith(day) && $"cmsType" === "topicId")
+    val cityTopn = commonDF
       .groupBy("hour","cmsId","city")
       .agg(count("cmsId").as("times"))
       .orderBy($"times".desc)
@@ -155,12 +161,12 @@ object TopNStatJob {
     * topn 的topicid 统计
     * 通过 dataframe 的方式
     * */
-  def topNStatCountByDF(spark: SparkSession, accessDF: DataFrame ,day:String) = {
+  def topNStatCountByDF(spark: SparkSession, commonDF: DataFrame) = {
 
     import spark.implicits._
 
 
-    val topnDF = accessDF.filter($"hour".startsWith(day)  && $"cmsType" === "topicId")
+    val topnDF = commonDF
       .groupBy("hour","cmsId").agg(count("cmsId").as("times")).orderBy($"times".desc)
 
     topnDF.show(false)
