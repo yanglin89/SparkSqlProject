@@ -16,7 +16,9 @@ object TopNStatJob {
     val spark = SparkSession.builder().appName("TopNStatJob").master("local[2]")
       .config("spark.sql.sources.partitionColumnTypeInference.enable","false").getOrCreate()
 
-    // 注意 load 的path 中，要是最后的路径后面加 * 如 XXX/clean/*，则加载到的数据没有分区信息，我们把* 去掉，则打印schema 存在分区信息
+    // 注意 load 的path 中，
+    // 要是最后的路径后面加 * 如 XXX/clean/*，则加载到的数据没有分区信息，
+    // 我们把* 去掉，则打印schema 存在分区信息
     val accessDF = spark.read.format("parquet").load("E:/study_data/clean/")
 
     accessDF.printSchema()

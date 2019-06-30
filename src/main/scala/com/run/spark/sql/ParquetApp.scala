@@ -20,7 +20,7 @@ object ParquetApp {
     userPQ.show()
 
     //生成文件
-//    userPQ.select("name","favorite_color").write.format("json").save("file:///E:/study_data/usersout.json")
+    userPQ.select("name","favorite_color").write.format("json").save("file:///E:/study_data/usersout.json")
 
     spark.stop()
 

@@ -6,7 +6,8 @@ object SparkHive {
 
   def main(args: Array[String]): Unit = {
 
-    val spark = SparkSession.builder().appName("ParquetApp").master("local[2]").enableHiveSupport().getOrCreate()
+    val spark = SparkSession.builder().appName("ParquetApp").master("local[2]")
+      .enableHiveSupport().getOrCreate()
 
     // 切换数据库 默认为default
     spark.sql("use default")

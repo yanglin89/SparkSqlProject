@@ -19,8 +19,8 @@ object DatasetApp {
     salas.show()
 
     // 将dataframe 转为 dataset 通过 as[]
-//    val dataset = salas.as[Salas]
-//    dataset.map(line => line.b).show()
+    val dataset = salas.as[Salas]
+    dataset.map(line => line.b).show()
 
 
     spark.stop()

@@ -42,6 +42,7 @@ object TopNStatJobReusable {
     }
 
   // 复用 commonDF ，将 commonDF 放置在 缓存 cache 中
+    // accessDF的格式为DataFrame， accessDF.filter()后的格式为Dataset
     import spark.implicits._
     val commonDF = accessDF.filter($"hour".startsWith(day)  && $"cmsType" === "topicId")
     commonDF.cache()
